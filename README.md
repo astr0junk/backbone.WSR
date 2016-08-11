@@ -9,9 +9,9 @@ load library after/with Backbone
 
 create wsPoint instance
 
-`var wsPoint = new ws('wss://YourWebSocketPoint/', {expectSeconds: 5, debug: true});`
+`var wsr = new WSR('wss://YourWebSocketPoint/', {expectSeconds: 5, debug: true});`
 
-wsPoint.on('ws:open',function(){
+wsr.on('ws:open',function(){
   //start your app here
 })
 
