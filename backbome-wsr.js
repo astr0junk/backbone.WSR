@@ -245,7 +245,7 @@
 
             this.trigger(this.prefix + 'close', event);
 
-            if ( this.reopen && socket ) {
+            if ( this.reopen && this.socket ) {
                 if ( this.retries ) {
                     this.retries -= 1;
 
