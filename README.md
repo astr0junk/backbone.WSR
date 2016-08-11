@@ -1,3 +1,9 @@
+# Inspired by
+* Backbone.WS by Yehonatan Daniv
+* https://github.com/ydaniv/backbone-ws
+* @license BSD License 
+
+
 # backbone.WSR
 Library for WebSocket Requesting for Backbone Models and Collections.
 This library will override Backbone.Sync method. If it will find a correct event name and dataschema for sending by WebSocket - it will send it!
