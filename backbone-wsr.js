@@ -307,9 +307,13 @@
 
             model.trigger('request', model, this.socket, options);
 
-            var expect = this.Expectation(req, options);
-            expect.then(options.success, options.error);
-
+             if (!!options.wait){
+                var expect = this.Expectation(req, options);
+                expect.then(options.success, options.error);
+            } else {
+                (!!options.success && typeof options.success == 'function') && options.success.call();
+            }
+            
             return expect;
         }
     });
