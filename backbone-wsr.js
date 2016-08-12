@@ -274,7 +274,9 @@
 
             if ( this.socket ) {
 
-                console.log('>>> SENDING ', data);
+                 if ( this.debug ) {
+                    console.log('>>> SENDING ', data);
+                }
 
                 this.socket.send(str2ab(JSON.stringify(data)));
             }
