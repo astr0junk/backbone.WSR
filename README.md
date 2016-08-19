@@ -7,7 +7,8 @@
 # backbone.WSR
 Library for WebSocket Requesting for Backbone Models and Collections.
 This library will override Backbone.Sync method. If it will find a correct event name and dataschema for sending by WebSocket - it will send it!
-All sending in binary frame format (by ArrayBuffer). Expected response from server in binary frame format too.
+All messaging makes in binary frame format (by ArrayBuffer).
+Expected response from server in binary frame format too.
 
 # Usage example
 
@@ -42,7 +43,7 @@ WSR will get only these keys from model which you config in 'schema' property.
 Example
 
 var wsMethodMap = {
-     'read': { name: 'session:create', schema: {}}
+     'read': { name: 'session:create', schema: function() { return YOUR_REQEST_DATA_OBJECT; }}
 }
 
 var sessionModel = new SessionModel({wSmethodMap: wsMethodMap});
@@ -53,6 +54,8 @@ After sending will be created a promise object which will be rejected and assert
 or resolved if server will responsed with `response` field with value `session:create`. For example:
 
 "{"response":"session:create", "data":{"session":{"user_uuid":"","token":"9d602d7e57294812b68c76531c202eb7d41d8cd98f00b204e9800998ecf8427e"}}}"
+
+Request and response properties value MUST be equal if you want to trigger callbacks on 'onmessage' by promises
 
 
 
