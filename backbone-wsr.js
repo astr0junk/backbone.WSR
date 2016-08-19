@@ -19,18 +19,6 @@
     }
 }(this, function (root, Backbone, _) {
 
-
-    function isEmptyObject(obj) {
-
-        for(var prop in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, prop)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
     function ab2str(buf) {
 
         var buffer = new Uint8Array(buf),
@@ -43,7 +31,8 @@
             return JSON.parse(String.fromCharCode.apply(null, buffer));
         }
 
-        for (var i = 0; i < length; i = i+chunkLength ) {
+        for (var i = 0; i < length; i = i + chunkLength) {
+
             var begin = i,
                 end;
 
@@ -51,9 +40,9 @@
                 break;
             }
 
-            if ( (length-1 - begin) > chunkLength) {
-                end = begin+chunkLength;
-            }  else {
+            if ((length - 1 - begin) > chunkLength) {
+                end = begin + chunkLength;
+            } else {
                 end = length;
             }
 
@@ -61,9 +50,10 @@
 
             string += String.fromCharCode.apply(null, chunk);
 
+
         }
 
-        return JSON.parse(string);
+        return JSON.parse(decodeURIComponent(escape(string)));
 
     }
 
@@ -98,11 +88,10 @@
         this.typeAttribute = 'typeAttribute' in options ? options.typeAttribute : 'type';
         this.dataAttribute = 'dataAttribute' in options ? options.dataAttribute : 'data';
         this.sendAttribute = options.sendAttribute || 'send';
-        this.keepOpen = ! ! options.keepOpen;
-        this.debug = ! ! options.debug;
-        this.useSync = ! ! options.sync;
+        this.debug =  options.debug ? options.debug : null;
         this.reopen = 'reopen' in options ? options.reopen : true;
         this.retries = 'retries' in options ? options.retries : 3;
+        this.heartbeat_timeout = options.heartbeat_timeout || 120000;
         this.reopenTimeout = options.reopenTimeout ? options.reopenTimeout : 3000;
         this.expectSeconds = (options.expectSeconds || 7) * 1000;
         this.expectation = 'expect' in options ? options.expect : null;
@@ -213,20 +202,55 @@
                 self.trigger(self.prefix + 'open');
             },1000);
 
+
+            this.missed_heartbeats = 0;
+
+            this.heartbeat_interval = setInterval(function() {
+
+                try {
+                    self.missed_heartbeats++;
+                    if (self.missed_heartbeats >= 5)
+                        throw new Error("Too many missed heartbeats.");
+                    self.send({
+                        "request": "node:ping"
+                    });
+
+                } catch(e) {
+                    clearInterval(this.heartbeat_interval);
+                    this.heartbeat_interval = null;
+                    console.warn("Closing connection. Reason: " + e.message);
+                    self.trigger('close');
+                }
+
+            }, self.heartbeat_timeout);
+
+
         },
         onmessage: function (event) {
 
-            var data, type;
+            var data, type = 'response';
 
                 data = ab2str(event.data);
 
-                if ( this.debug ) {
-                    console.log('>>> Incoming message ', data, new Date());
+
+                if ( this.debug && this.debug.incoming ) {
+                    console.log('%c<<<"'+data.response+':',"color: red;font-size: 1.1em", data, new Date());
                 }
 
-            if ( !!data['response'] ) {
-                this.trigger('response:'+data.response, data['data']);
-            }
+                if ( !!data['response'] ) {
+
+                    if (data['response'] ===  "node:ping") {
+                        this.missed_heartbeats = 0;
+                        return;
+                    }
+
+                    this.trigger('response:'+data.response, data['data']);
+                }
+
+                if (!!data['event']) {
+                    this.trigger('server:event', data);
+                }
+
 
         },
         onerror  : function (error) {
@@ -237,6 +261,7 @@
             this.trigger(this.prefix + 'error', error, this.isOpen);
         },
         onclose  : function (event) {
+
             this.isOpen = false;
 
             if ( this.debug ) {
@@ -246,6 +271,7 @@
             this.trigger(this.prefix + 'close', event);
 
             if ( this.reopen && this.socket ) {
+
                 if ( this.retries ) {
                     this.retries -= 1;
 
@@ -258,7 +284,14 @@
                 else {
                     this.trigger(this.prefix + 'noretries', event);
                 }
+
             }
+
+            if (!!this.heartbeat_interval){
+                clearInterval(this.heartbeat_interval);
+                this.heartbeat_interval = null;
+            }
+
         },
         destroy  : function () {
 
@@ -270,19 +303,34 @@
             this.socket = null;
             this.resources = [];
         },
+        waitForConnection : function (callback, interval) {
+            if (this.socket.readyState === 1) {
+                callback();
+            } else {
+                var that = this;
+                // optional: implement backoff for interval here
+                setTimeout(function () {
+                    that.waitForConnection(callback, interval);
+                }, interval);
+            }
+        },
         send : function (data) {
+            var self = this;
+            
+            this.waitForConnection(function () {
+                if ( self.socket ) {
 
-            if ( this.socket ) {
+                    if ( self.debug && self.debug.send) {
+                        console.log('%c>>>"'+data.request+':',"color: red;font-size: 1.1em", data, new Date());
+                    }
 
-                 if ( this.debug ) {
-                    console.log('>>> SENDING ', data);
+                    self.socket.send(str2ab(JSON.stringify(data)));
+                }
+                else {
+                    throw new Error('WebSocket not opened yet!');
                 }
 
-                this.socket.send(str2ab(JSON.stringify(data)));
-            }
-            else {
-                throw new Error('WebSocket not opened yet!');
-            }
+            }, 1000);
         },
         sync : function (method, model, options) {
 
@@ -290,16 +338,22 @@
                 return ajaxSync.call(Backbone, method, model, options);
             }
 
+            if (!model.wsMethodMap) {
+                console.log('WebSocket method not find in wsMethodMap');
+                return;
+            }
+
             var req = {data:{}};
 
             if ( ! req.request ) {
-                req.request = model.wSmethodMap[method].name;
+                req.request = model.wsMethodMap[method].name;
             }
 
-            if (!isEmptyObject(model.wSmethodMap[method].schema)) {
-                req['data'] = options.data || options.attrs || _.pick(model.toJSON(options), _.keys(model.wSmethodMap[method].schema));
+            if (!!model.wsMethodMap[method].schema) {
+                req['data'] = options.data || options.attrs || model.wsMethodMap[method].schema.call(model);
+            } else {
+                req['data'] = model.toJSON()
             }
-
 
             if ( typeof options.beforeSend == 'function' ) {
                 options.beforeSend.apply(model, arguments);
@@ -309,13 +363,13 @@
 
             model.trigger('request', model, this.socket, options);
 
-             if (!!options.wait){
+            if (!!options.wait){
                 var expect = this.Expectation(req, options);
                 expect.then(options.success, options.error);
             } else {
                 (!!options.success && typeof options.success == 'function') && options.success.call();
             }
-            
+
             return expect;
         }
     });
