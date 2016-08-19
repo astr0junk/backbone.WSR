@@ -28,7 +28,7 @@
         var string = '';
 
         if (length < chunkLength) {
-            return JSON.parse(String.fromCharCode.apply(null, buffer));
+            return JSON.parse(decodeURIComponent(escape(String.fromCharCode.apply(null, buffer))));
         }
 
         for (var i = 0; i < length; i = i + chunkLength) {
